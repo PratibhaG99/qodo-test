@@ -10,6 +10,8 @@ def load_document(file_path):
     with open(file_path, 'r', encoding='utf-8') as file:
         return file.read()
 
+def dummy_fun():
+    return None
 
 def generate_question_answer_pairs(text, num_pairs=5):
     """
