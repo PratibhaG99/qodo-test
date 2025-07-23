@@ -11,6 +11,7 @@ def load_document(file_path):
         return file.read()
 
 def dummy_fun():
+    print("Testing")
     return None
 
 def generate_question_answer_pairs(text, num_pairs=5):
