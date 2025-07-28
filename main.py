@@ -15,17 +15,34 @@ from pathlib import Path
 import time
 
 # Download required NLTK data
-nltk.download('punkt')
-nltk.download('stopwords')
-nltk.download('averaged_perceptron_tagger')
+try:
+    nltk.download('punkt')
+    nltk.download('stopwords')
+    nltk.download('averaged_perceptron_tagger')
+except Exception as e:
+    print(f"Warning: Failed to download NLTK data: {e}")
 
 # Load spaCy model
-nlp = spacy.load('en_core_web_sm')
+try:
+    nlp = spacy.load('en_core_web_sm')
+except OSError as e:
+    print(f"Error: spaCy model 'en_core_web_sm' not found: {e}")
+    nlp = None
 
 def load_document(file_path):
     """Load document from a text file."""
-    with open(file_path, 'r', encoding='utf-8') as file:
-        return file.read()
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:
+            return file.read()
+    except FileNotFoundError:
+        print(f"Error: File '{file_path}' not found")
+        return ""
+    except PermissionError:
+        print(f"Error: Permission denied accessing '{file_path}'")
+        return ""
+    except UnicodeDecodeError:
+        print(f"Error: Unable to decode file '{file_path}' with UTF-8 encoding")
+        return ""
 
 
 def summarize_document(text):
@@ -47,14 +64,17 @@ def summarize_document(text):
     Summary:
     """
 
-    response = openai.ChatCompletion.create(
-        model="gpt-4",  # or "gpt-3.5-turbo"
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.5,
-        max_tokens=300
-    )
-
-    return response['choices'][0]['message']['content'].strip()
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4",  # or "gpt-3.5-turbo"
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.5,
+            max_tokens=300
+        )
+        return response['choices'][0]['message']['content'].strip()
+    except Exception as e:
+        print(f"Error calling OpenAI API: {e}")
+        return "Error: Unable to generate summary"
 
 
 def generate_question_answer_pairs(text, num_pairs=5):
@@ -379,10 +399,13 @@ class DocumentProcessor:
         
         combined['sentiment']['overall_polarity'] /= n_chunks
         combined['sentiment']['overall_subjectivity'] /= n_chunks
-        combined['sentiment']['average_sentence_polarity'] = (
-            sum(combined['sentiment']['sentence_polarities']) / 
-            len(combined['sentiment']['sentence_polarities'])
-        )
+        if combined['sentiment']['sentence_polarities']:
+            combined['sentiment']['average_sentence_polarity'] = (
+                sum(combined['sentiment']['sentence_polarities']) / 
+                len(combined['sentiment']['sentence_polarities'])
+            )
+        else:
+            combined['sentiment']['average_sentence_polarity'] = 0
         
         # Combine entities
         for result in chunk_results:
