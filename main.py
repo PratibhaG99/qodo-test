@@ -13,6 +13,7 @@ import concurrent.futures
 from functools import lru_cache
 from pathlib import Path
 import time
+import argparse
 
 # Download required NLTK data
 try:
@@ -158,14 +159,18 @@ def analyze_sentiment(text):
     sentiment = blob.sentiment
     
     # Analyze sentiment per sentence
-    sentences = sent_tokenize(text)
-    sentence_sentiments = [TextBlob(sentence).sentiment.polarity for sentence in sentences]
+    sentences = sent_tokenize(text) if text and text.strip() else []
+    sentence_sentiments = [TextBlob(sentence).sentiment.polarity for sentence in sentences] if sentences else []
+    average_sentence_polarity = (
+        sum(sentence_sentiments) / len(sentence_sentiments)
+        if sentence_sentiments else 0
+    )
     
     return {
         'overall_polarity': sentiment.polarity,
         'overall_subjectivity': sentiment.subjectivity,
         'sentence_polarities': sentence_sentiments,
-        'average_sentence_polarity': sum(sentence_sentiments) / len(sentence_sentiments)
+        'average_sentence_polarity': average_sentence_polarity
     }
 
 
@@ -179,6 +184,8 @@ def extract_entities(text):
     Returns:
         dict: Dictionary of entities grouped by type
     """
+    if nlp is None:
+        return {}
     doc = nlp(text)
     entities = {}
     
@@ -209,6 +216,19 @@ def calculate_readability(text):
     }
 
 
+def compute_basic_stats(text):
+    """Compute basic statistics for the document."""
+    words = word_tokenize(text) if text else []
+    sentences = sent_tokenize(text) if text else []
+    unique_words = set(w.lower() for w in words if w.isalpha())
+    return {
+        'character_count': len(text or ""),
+        'word_count': len(words),
+        'sentence_count': len(sentences),
+        'unique_word_count': len(unique_words)
+    }
+
+
 def display_summary(summary):
     print("\n📄 Document Summary:\n" + "-" * 60)
     print(summary)
@@ -220,9 +240,16 @@ def display_qa_pairs(qa_pairs):
         print(f"{i}. Q: {q}\n   A: {a}\n")
 
 
-def display_enhanced_analysis(topics, sentiment, entities, readability):
+def display_enhanced_analysis(topics, sentiment, entities, readability, stats=None):
     """Display the results of enhanced analysis."""
     print("\n📊 Enhanced Analysis Results:\n" + "-"*60)
+    
+    if stats is not None:
+        print("\n🧮 Basic Stats:")
+        print(f"- Characters: {stats['character_count']}")
+        print(f"- Words: {stats['word_count']}")
+        print(f"- Sentences: {stats['sentence_count']}")
+        print(f"- Unique Words: {stats['unique_word_count']}")
     
     print("\n📌 Key Topics:")
     for topic, freq in topics:
@@ -243,6 +270,16 @@ def display_enhanced_analysis(topics, sentiment, entities, readability):
     print(f"- Gunning Fog Index: {readability['gunning_fog']:.1f}")
     print(f"- SMOG Index: {readability['smog_index']:.1f}")
     print(f"- Automated Readability Index: {readability['automated_readability_index']:.1f}")
+
+
+def save_results_to_json(result, output_path):
+    """Save the full analysis result to a JSON file."""
+    try:
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(result, f, ensure_ascii=False, indent=2)
+        print(f"Saved results to {output_path}")
+    except Exception as e:
+        print(f"Error saving results to {output_path}: {e}")
 
 
 class DocumentProcessor:
@@ -347,6 +384,9 @@ class DocumentProcessor:
         # Combine chunk results
         combined_result = self._combine_chunk_results(chunk_results)
         
+        # Add basic stats for the full document
+        combined_result['stats'] = compute_basic_stats(text)
+        
         # Cache the final result
         self._cache_result(text, "full_analysis", combined_result)
         
@@ -424,11 +464,16 @@ class DocumentProcessor:
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Process a document and generate analysis")
+    parser.add_argument("--file", default="document.txt", help="Path to input text file")
+    parser.add_argument("--export", default=None, help="Optional path to export full JSON results")
+    args = parser.parse_args()
+
     # Initialize document processor
     processor = DocumentProcessor(cache_dir="document_cache")
     
     # Single file processing
-    file_path = "document.txt"
+    file_path = args.file
     result = processor.process_document(file_path)
     
     # Display results
@@ -438,22 +483,13 @@ def main():
         result['topics'],
         result['sentiment'],
         result['entities'],
-        result['readability']
+        result['readability'],
+        result.get('stats')
     )
-    
-    # Example of batch processing multiple files
-    # file_paths = ["doc1.txt", "doc2.txt", "doc3.txt"]
-    # results = processor.process_documents(file_paths)
-    # for path, result in results.items():
-    #     print(f"\nResults for {path}:")
-    #     display_summary(result['summary'])
-    #     display_qa_pairs(result['qa_pairs'])
-    #     display_enhanced_analysis(
-    #         result['topics'],
-    #         result['sentiment'],
-    #         result['entities'],
-    #         result['readability']
-    #     )
+
+    # Optional export
+    if args.export:
+        save_results_to_json(result, args.export)
 
 
 if __name__ == "__main__":
